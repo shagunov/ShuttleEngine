@@ -3,7 +3,7 @@
 #include "IncludeVulkan.hpp"
 #include <vector>
 
-namespace shuttle_engine::resources {
+namespace shuttle_engine::memory {
 	enum class AllocationCreateFlagBits : uint32_t {
 		eDedicatedMemory = 0x00000001,
 		eNeverAllocate = 0x00000002,
@@ -26,29 +26,29 @@ namespace shuttle_engine::resources {
 }
 
 template <>
-struct vk::FlagTraits<shuttle_engine::resources::AllocationCreateFlagBits> {
+struct vk::FlagTraits<shuttle_engine::memory::AllocationCreateFlagBits> {
 	using WrappedType = uint32_t;
 	enum { isBitmask = true };
 
 	static constexpr auto allFlags =
-		shuttle_engine::resources::AllocationCreateFlags(
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eDedicatedMemory) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eNeverAllocate) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eMapped) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eUserDataCopyString) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eUpperAddressBit) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eDontBind) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eWithinBud) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eCanAlias) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eHostAccessSequentialWrite) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eHostAccessRandom) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eStrategyMinMemory) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eCreateStrategyMinTime) |
-			static_cast<uint32_t>(shuttle_engine::resources::AllocationCreateFlagBits::eCreateStrategyMinOffset)
+		shuttle_engine::memory::AllocationCreateFlags(
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eDedicatedMemory) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eNeverAllocate) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eMapped) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eUserDataCopyString) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eUpperAddressBit) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eDontBind) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eWithinBud) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eCanAlias) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eHostAccessSequentialWrite) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eHostAccessRandom) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eStrategyMinMemory) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eCreateStrategyMinTime) |
+			static_cast<uint32_t>(shuttle_engine::memory::AllocationCreateFlagBits::eCreateStrategyMinOffset)
 		);
 };
 
-namespace shuttle_engine::resources {
+namespace shuttle_engine::memory {
 	using AllocationCreateFlags = vk::Flags<AllocationCreateFlagBits>;
 
 	enum class MemoryUsage {
@@ -182,6 +182,21 @@ namespace shuttle_engine::resources {
 		AllocatedResource<TResource>& operator*() noexcept { return allocatedResource; }
 		AllocatedResource<TResource> const& operator*() const noexcept { return allocatedResource; }
 
+		// В секцию public:
+
+		/// Проверка на валидность ресурса (аналог std::unique_ptr)
+		explicit operator bool() const noexcept {
+			// Ресурс валиден, если внутренний хэндл Vulkan не равен null
+			// (замени 'image' на имя твоего поля с vk::Image)
+			return static_cast<bool>(static_cast<TResource>(allocatedResource));
+		}
+
+		/// Оператор логического "НЕ"
+		bool operator!() const noexcept {
+			return !static_cast<bool>(static_cast<TResource>(allocatedResource));
+		}
+
+
 		~UniqueAllocatedResource() {
 			if (allocatedResource != AllocatedResource<TResource>{})
 			deleter(allocatedResource);
@@ -231,6 +246,8 @@ namespace shuttle_engine::resources {
 		[[nodiscard]] vk::Result readBufferToHostStride(StrideCopyBufferToHostInfo const& readInfos) const noexcept;
 		[[nodiscard]] vk::Result writeBufferFromHost(CopyHostToBufferInfo const& writeInfo) const noexcept;
 		[[nodiscard]] vk::Result readBufferToHost(CopyBufferToHostInfo const& readInfo) const noexcept;
+		[[nodiscard]] void* getMappedPointer(AllocatedBuffer buffer) const noexcept;
+
 
 		DeviceAllocator& operator=(DeviceAllocator const& other) = default;
 

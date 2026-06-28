@@ -1,100 +1,45 @@
 #pragma once
-#include <functional>
 #include <SDL2/SDL.h>
-#include "../SdlKeyboard/SdlKeyCode.hpp"
-#include "../SdlKeyboard/SdlKeyMode.hpp"
-#include "../SdlMouse/SdlMouseButton.hpp"
 #include "IncludeVulkan.hpp"
 
-enum class SdlKeyState {
-	Pressed = SDL_PRESSED,
-	Released = SDL_RELEASED
-};
+namespace shuttle_engine {
 
-enum class ShowMode {
-	Normal,
-	Minimized,
-	Maximized,
-	Fullscreen
-};
+	class SdlWindow {
+	public:
+		SdlWindow(char const* title, int width, int height);
 
-class Event{};
+		SDL_Window* getWindow() { return window; }
 
-class SdlWindow {
-public:
-	SdlWindow(char const* title, int width, int height);
+		[[nodiscard]] vk::SurfaceKHR createVulkanSurface(vk::Instance const& instance) const;
+		[[nodiscard]] vk::UniqueSurfaceKHR createVulkanSurfaceUnique(vk::Instance const& instance) const;
 
-	SDL_Window* getWindow() {
-		return window;
-	}
+		// Запрет копирования/перемещения (окно уникально)
+		SdlWindow(SdlWindow const&) = delete;
+		SdlWindow& operator=(SdlWindow const&) = delete;
+		SdlWindow(SdlWindow&&) = delete;
+		SdlWindow& operator=(SdlWindow&&) = delete;
 
-	[[nodiscard]] vk::SurfaceKHR createVulkanSurface(vk::Instance const& instance) const;
+		vk::Extent2D getExtent() const;
 
-	[[nodiscard]] vk::UniqueSurfaceKHR createVulkanSurfaceUnique(vk::Instance const& instance) const;
+		// Чистые методы изменения состояния окна
+		void setPosition(int x, int y);
+		void setSize(int width, int height);
+		void close();
+		void show();
+		void hide();
+		void maximize();
+		void minimize();
+		void restore();
 
-	// Delete copy and move constructors and assignment operators
-	SdlWindow(SdlWindow const&) = delete;
-	SdlWindow& operator=(SdlWindow const&) = delete;
-	SdlWindow(SdlWindow&&) = delete;
-	SdlWindow& operator=(SdlWindow&&) = delete;
+		// Добавь в SdlWindow.hpp в public:
+		void setFullscreen(bool enabled);
+		void setBorderless(bool enabled); // На случай, если захочется сделать просто окно без рамок
 
-	static void processEvent(SDL_Event const& event);
 
-	vk::Extent2D getExtent() const;
+		~SdlWindow();
 
-	void setPosition(int x, int y);
-	void setSize(int width, int height);
-	void close();
-	void show();
-	void hide();
-	void maximize();
-	void minimize();
-	void restore();
+	private:
+		SDL_Window* window = nullptr;
+	};
 
-	void setWindowCloseEventCallback(std::function<void(SdlWindow&)> callback);
-	void setWindowResizeEventCallback(std::function<void(SdlWindow&, int, int)> callback);
-	void setWindowMoveEventCallback(std::function<void(SdlWindow&, int, int)> callback);
-	void setWindowFocusEventCallback(std::function<void(SdlWindow&, int)> callback);
-	void setWindowShowModeEventCallback(std::function<void(SdlWindow&, ShowMode)> callback);
-	void setMouseMotionEventCallback(std::function<void(SdlWindow&, int, int)> callback);
-	void setMouseButtonEventCallback(std::function<void(SdlWindow&, SdlMouseButton, SdlKeyState)> callback);
-	void setMouseWheelEventCallback(std::function<void(SdlWindow&, int, int)> callback);
-	void setKeyboardEventCallback(std::function<void(SdlWindow&, SdlKeyCode, SdlKeyMode, SdlKeyState)> callback);
-
-	~SdlWindow();
-
-private:
-	SDL_Window* window;
-
-	std::function<void(SdlWindow&)> windowCloseEventCallback;
-
-	std::function<void(SdlWindow&, int, int)> windowResizeEventCallback;
-	std::function<void(SdlWindow&, int, int)> windowMoveEventCallback;
-	std::function<void(SdlWindow&, int)> windowFocusEventCallback;
-	std::function<void(SdlWindow&, ShowMode)> windowShowModeEventCallback;
-
-	std::function<void(SdlWindow&, int, int)> mouseMotionEventCallback;
-	std::function<void(SdlWindow&, SdlMouseButton, SdlKeyState)> mouseButtonEventCallback;
-	std::function<void(SdlWindow&, int, int)> mouseWheelEventCallback;
-	std::function<void(SdlWindow&, SdlKeyCode, SdlKeyMode, SdlKeyState)> keyboardEventCallback;
-
-	bool hasCloseEventCallback = false;
-	bool hasResizeEventCallback = false;
-	bool hasMoveEventCallback = false;
-	bool hasFocusEventCallback = false;
-	bool hasShowModeEventCallback = false;
-	bool hasMouseMotionEventCallback = false;
-	bool hasMouseButtonEventCallback = false;
-	bool hasMouseWheelEventCallback = false;
-	bool hasKeyboardEventCallback = false;
-
-	static void dispatchEvent(SDL_Event const& event);
-
-	static void dispatchWindowEvent(SDL_WindowEvent const& windowEvent);
-	static void dispatchMouseMotionEvent(SDL_MouseMotionEvent const& mouseMotionEvent);
-	static void dispatchMouseButtonEvent(SDL_MouseButtonEvent const& mouseButtonEvent);
-	static void dispatchMouseWheelEvent(SDL_MouseWheelEvent const& mouseWheelEvent);
-	static void dispatchKeyboardEvent(SDL_KeyboardEvent const& keyboardEvent);
-
-	static SdlWindow& getObjectFromId(uint32_t windowId);
-};
+} // namespace shuttle_engine

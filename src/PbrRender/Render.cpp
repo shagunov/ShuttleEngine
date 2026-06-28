@@ -69,9 +69,6 @@ namespace shuttle_engine {
         if (auto res = render.initSamplerDescriptorSetLayout(device); res != vk::Result::eSuccess)
             return {res, {}};
 
-        if (auto res = render.initModelDataSetLayout(device); res != vk::Result::eSuccess)
-            return {res, {}};
-
         if (auto res = render.initSamplers(device); res != vk::Result::eSuccess)
             return {res, {}};
 
@@ -161,8 +158,6 @@ namespace shuttle_engine {
         resultData.indirectDrawBufferOffset = deviceMeshData.indirectBufferOffset;
         resultData.indirectDraws = std::move(deviceMeshData.indirectDraws);
 
-        resultData.modelSsbo = std::move(deviceMeshData.modelSsboBuffer);
-
         // 3. СОЗДАНИЕ DESCRIPTOR POOL
         uint32_t const totalSetsCount = matCount + 1;
 
@@ -212,39 +207,7 @@ namespace shuttle_engine {
             resultData.materials.push_back(std::move(renderMat));
             stagingMatInfos.push_back(std::move(stagingMatInfo));
         }
-
-        auto [createModelSsboSetResult, modelSsboSet] = device.allocateDescriptorSets(
-            {
-                .descriptorPool = *uniqueDescriptorPool,
-                .descriptorSetCount = 1,
-                .pSetLayouts = &*modelSetLayout
-            }
-        );
-
-        if (createModelSsboSetResult != vk::Result::eSuccess) return {createModelSsboSetResult, {}};
-
-        resultData.modelSsboDescriptorSet = std::move(modelSsboSet[0]);
         resultData.descriptorPool = std::move(uniqueDescriptorPool);
-
-        vk::DescriptorBufferInfo bufferInfo{
-            .buffer = *resultData.modelSsbo,
-            .offset = 0,
-            .range = vk::WholeSize
-        };
-
-        device.updateDescriptorSets(
-            {
-                vk::WriteDescriptorSet{
-                    .dstSet = resultData.modelSsboDescriptorSet,
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = vk::DescriptorType::eStorageBuffer,
-                    .pBufferInfo = &bufferInfo
-                }
-            },
-            {}
-        );
 
         // 6. СБОРКА И ОТПРАВКА КОМАНД КОПИРОВАНИЯ НА GPU
         auto [allocateCmdRes, tempCmdBuffers] = device.allocateCommandBuffersUnique({
@@ -261,8 +224,7 @@ namespace shuttle_engine {
             cmd,
             *resultData.vertexBuffer,
             *resultData.indexBuffer,
-            *resultData.indirectDrawBuffer,
-            *resultData.modelSsbo
+            *resultData.indirectDrawBuffer
         );
 
         for (uint32_t i = 0; i < matCount; ++i) {
@@ -320,7 +282,7 @@ namespace shuttle_engine {
         DeviceSceneData const& sceneData,
         vk::CommandBuffer cmd,
         FrameData const& frameData,
-        RenderTargets const& targets,
+        RenderTarget const& targets,
         std::function<void(vk::CommandBuffer)> const& additionalCommands) const
     {
         // =========================================================================
@@ -357,7 +319,6 @@ namespace shuttle_engine {
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowPipeline);
 
             std::array shadowDescriptorSets{
-                sceneData.modelSsboDescriptorSet,
                 frameData.sceneDataSet
             };
 
@@ -425,8 +386,7 @@ namespace shuttle_engine {
 
             std::array mainRenderingSets {
                 samplersSet,     // Будет доступен как set = 0
-                sceneData.modelSsboDescriptorSet,        // Будет доступен как set = 1
-                frameData.sceneDataSet // Будет доступен как set = 2
+                frameData.sceneDataSet // Будет доступен как set = 1
             };
 
             // Биндим Global Scene Set
@@ -607,13 +567,13 @@ namespace shuttle_engine {
         return vk::Result::eSuccess;
     }
 
-    vk::ResultValue<std::vector<RenderTargets>> PbrRender::createRenderTargets(
+    vk::ResultValue<std::vector<RenderTarget>> PbrRender::createRenderTargets(
         vk::Device device,
         resources::DeviceAllocator const &allocator,
         std::vector<vk::Image> const &targetImages,
         vk::Extent2D renderTargetExtent) const{
 
-        std::vector<RenderTargets> result;
+        std::vector<RenderTarget> result;
         result.reserve(targetImages.size());
 
         for (auto const& target : targetImages) {
@@ -702,13 +662,140 @@ namespace shuttle_engine {
 
             if (framebufferCreateResult != vk::Result::eSuccess) return {framebufferCreateResult, {}};
 
-            result.emplace_back(RenderTargets{
+            result.emplace_back(RenderTarget{
                 .depthBufferImage = std::move(uniqueDepthBuffer),
                 .depthBufferImageView = std::move(uniqueDepthBufferImageView),
                 .colorAttachmentImageView = std::move(uniqueColorImageView),
                 .mainRenderPassFramebuffer = std::move(uniqueFramebuffer),
                 .renderTargetExtent = renderTargetExtent
             });
+        }
+        return {vk::Result::eSuccess, std::move(result)};
+    }
+
+    vk::ResultValue<std::vector<OffscreenRenderTarget>> PbrRender::createOffscreenRenderTargets(
+        vk::Device device,
+        resources::DeviceAllocator const &allocator,
+        uint32_t frameCount,
+        vk::Extent2D renderTargetExtent) const {
+        std::vector<OffscreenRenderTarget> result;
+        result.resize(frameCount);
+
+        for (auto& target : result) {
+
+            auto [colorAttachmentImageCreateResult, uniqueColorAttachmentImage] = allocator.createAndAllocateImageUnique(
+                {
+                    .imageType = vk::ImageType::e2D,
+                    .format = vk::Format::eB8G8R8A8Srgb,
+                    .extent = {
+                        .width = renderTargetExtent.width,
+                        .height = renderTargetExtent.height,
+                        .depth = 1
+                    },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = vk::SampleCountFlagBits::e1,
+                    .tiling = vk::ImageTiling::eOptimal,
+                    .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+                    .sharingMode = vk::SharingMode::eExclusive
+                },
+                resources::MemoryUsage::eGpuOnly
+            );
+            if (colorAttachmentImageCreateResult != vk::Result::eSuccess) return {colorAttachmentImageCreateResult, {}};
+
+            auto [depthBufferCreateResult, uniqueDepthBuffer] = allocator.createAndAllocateImageUnique(
+                vk::ImageCreateInfo{
+                    .imageType = vk::ImageType::e2D,
+                    .format = vk::Format::eD32SfloatS8Uint,
+                    .extent = vk::Extent3D{
+                        .width = renderTargetExtent.width,
+                        .height = renderTargetExtent.height,
+                        .depth = 1
+                    },
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = vk::SampleCountFlagBits::e1,
+                    .tiling = vk::ImageTiling::eOptimal,
+                    .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                    .sharingMode = vk::SharingMode::eExclusive
+                },
+                resources::MemoryUsage::eGpuOnly
+            );
+
+            if (depthBufferCreateResult != vk::Result::eSuccess) return {depthBufferCreateResult, {}};
+
+            auto [colorImageViewCreateResult, uniqueColorImageView] = device.createImageViewUnique(
+                vk::ImageViewCreateInfo{
+                    .image = *uniqueColorAttachmentImage,
+                    .viewType = vk::ImageViewType::e2D,
+                    .format = vk::Format::eB8G8R8A8Srgb,
+                    .components = {
+                        .r = vk::ComponentSwizzle::eIdentity,
+                        .g = vk::ComponentSwizzle::eIdentity,
+                        .b = vk::ComponentSwizzle::eIdentity,
+                        .a = vk::ComponentSwizzle::eIdentity
+                    },
+                    .subresourceRange = vk::ImageSubresourceRange{
+                        .aspectMask = vk::ImageAspectFlagBits::eColor,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    }
+                }
+            );
+
+            if (colorImageViewCreateResult != vk::Result::eSuccess) return {colorImageViewCreateResult, {}};
+
+            auto [depthBufferImageViewCreateResult, uniqueDepthBufferImageView] = device.createImageViewUnique(
+                vk::ImageViewCreateInfo{
+                    .image = *uniqueDepthBuffer,
+                    .viewType = vk::ImageViewType::e2D,
+                    .format = vk::Format::eD32SfloatS8Uint,
+                    .components = {
+                        .r = vk::ComponentSwizzle::eIdentity,
+                        .g = vk::ComponentSwizzle::eIdentity,
+                        .b = vk::ComponentSwizzle::eIdentity,
+                        .a = vk::ComponentSwizzle::eIdentity
+                    },
+                    .subresourceRange = {
+                        .aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1
+                    }
+                }
+            );
+
+            if (depthBufferImageViewCreateResult != vk::Result::eSuccess) return {depthBufferImageViewCreateResult, {}};
+
+            std::array attachments {
+                *uniqueColorImageView,
+                *uniqueDepthBufferImageView
+            };
+
+            auto [framebufferCreateResult, uniqueFramebuffer] = device.createFramebufferUnique(
+                vk::FramebufferCreateInfo{
+                    .renderPass = *mainRenderPass,
+                    .attachmentCount = 2,
+                    .pAttachments = attachments.data(),
+                    .width = renderTargetExtent.width,
+                    .height = renderTargetExtent.height,
+                    .layers = 1
+                }
+            );
+
+            if (framebufferCreateResult != vk::Result::eSuccess) return {framebufferCreateResult, {}};
+
+            target = OffscreenRenderTarget {
+                .colorAttachmentImage = std::move(uniqueColorAttachmentImage),
+                .depthBufferImage = std::move(uniqueDepthBuffer),
+                .depthBufferImageView = std::move(uniqueDepthBufferImageView),
+                .colorAttachmentImageView = std::move(uniqueColorImageView),
+                .mainRenderPassFramebuffer = std::move(uniqueFramebuffer),
+                .renderTargetExtent = renderTargetExtent
+            };
         }
         return {vk::Result::eSuccess, std::move(result)};
     }

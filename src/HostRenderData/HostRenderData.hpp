@@ -7,16 +7,85 @@
 #include <glm/glm.hpp>
 
 #include "IncludeVulkan.hpp"
-#include "DeviceAllocator/DeviceAllocator.hpp"
+#include "memory/DeviceAllocator/DeviceAllocator.hpp"
 
 namespace shuttle_engine {
 
-    struct HostMeshData {
+    // Структуры, которые мы используем в GeometryStore
+    struct PositionAttribute {
+        alignas(16) glm::vec3 position;
+    };
+
+    struct NormalTangentUvAttribute {
+        alignas(16) glm::vec3 normal;
+        alignas(16) glm::vec2 uv;
+        alignas(16) glm::vec4 tangent;
+    };
+
+    // HostVertex — удобная упаковка, используется внутри загрузчика/optimizer
+    struct HostVertex {
+        glm::vec3 position;
+        glm::vec3 normal;
+        glm::vec2 uv;
+        glm::vec4 tangent;
+    };
+
+    // "Сырой" меш, который возвращает AssimpLoader
+    struct HostMesh {
         std::vector<glm::vec3> positions;
         std::vector<glm::vec3> normals;
         std::vector<glm::vec2> uvs;
-        std::vector<glm::vec4> tangents;
+        std::vector<glm::vec4> tangents; // если Assimp не дал — можно генерировать
         std::vector<uint32_t> indices;
+
+        // Утилиты:
+        [[nodiscard]] size_t vertexCount() const { return positions.size(); }
+        [[nodiscard]] size_t indexCount()  const { return indices.size(); }
+
+        // Возвращает упакованный массив HostVertex (для meshoptimizer / дальнейшей обработки)
+        [[nodiscard]] std::vector<HostVertex> packVertices() const {
+            std::vector<HostVertex> out;
+            out.reserve(positions.size());
+            for (size_t i = 0; i < positions.size(); ++i) {
+                HostVertex v{};
+                v.position = positions[i];
+                v.normal   = (i < normals.size()) ? normals[i] : glm::vec3(0.0f, 1.0f, 0.0f);
+                v.uv       = (i < uvs.size()) ? uvs[i] : glm::vec2(0.0f);
+                v.tangent  = (i < tangents.size()) ? tangents[i] : glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                out.push_back(v);
+            }
+            return out;
+        }
+
+        // Заполняет буфер NormalTangentUvAttribute из packed vertices
+        static std::vector<NormalTangentUvAttribute> makeAttributeBuffer(const std::vector<HostVertex>& verts) {
+            std::vector<NormalTangentUvAttribute> out; out.reserve(verts.size());
+            for (auto &v : verts) {
+                out.push_back({ v.normal, v.uv, v.tangent });
+            }
+            return out;
+        }
+    };
+
+    // --- Ограничивающий бокс для Frustum Culling ---
+    struct AABB {
+        glm::vec3 min = glm::vec3(std::numeric_limits<float>::max());
+        glm::vec3 max = glm::vec3(std::numeric_limits<float>::lowest());
+
+        void extend(const glm::vec3& p) {
+            min = glm::min(min, p);
+            max = glm::max(max, p);
+        }
+    };
+
+    // --- Контейнер для данных меша на CPU ---
+    struct HostMeshData {
+        // Раздельные массивы для разных буферов на GPU
+        std::vector<PositionAttribute> positions;
+        std::vector<NormalTangentUvAttribute> attributes;
+        std::vector<uint32_t> indices; // Индексы (общие для обоих буферов)
+
+        AABB localAABB; // Локальный ограничивающий бокс меша (для куллинга)
     };
 
     struct HostMaterialProperties {

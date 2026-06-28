@@ -308,8 +308,7 @@ namespace shuttle_engine {
         vk::CommandBuffer cmdBuffer,
         vk::Buffer vertexBuffer,
         vk::Buffer indexBuffer,
-        vk::Buffer indirectCommandsBuffer,
-        vk::Buffer modelDatasBuffer) const {
+        vk::Buffer indirectCommandsBuffer) const {
         cmdBuffer.copyBuffer(
             stagingBuffer,
             vertexBuffer,

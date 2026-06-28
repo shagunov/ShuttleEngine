@@ -5,7 +5,7 @@
 #include <string>
 #include "IncludeVulkan.hpp"
 #include "../HostRenderData/HostRenderData.hpp"
-#include "DeviceAllocator/DeviceAllocator.hpp"
+#include "memory/DeviceAllocator/DeviceAllocator.hpp"
 
 shuttle_engine::HostMaterialData loadFromFiles(std::string const& albedoPath, std::string const& normalPath,
                                                std::string const& roughnessPath, std::string const& occlusionPath, std::string const& metallicPath, std::string const& emissionPath);
@@ -117,10 +117,6 @@ struct StagingBufferData {
 	vk::Buffer buffer;
 	vk::DeviceMemory memory;
 	vk::DeviceSize offset;
-};
-
-class ImageSampler {
-
 };
 
 class Image1D16bit {

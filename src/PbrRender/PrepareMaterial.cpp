@@ -147,11 +147,11 @@ namespace shuttle_engine {
         auto copyOrCreateEmpty = [](const std::optional<HostImageData>& optData,
                                     std::array<uint8_t, 4> defaultValue,
                                     vk::Format format,
-                                    resources::MipFilter mipFilter)
+                                    memory::MipFilter mipFilter)
         {
             if (optData.has_value()) {
                 HostImageData hostData = optData.value();
-                resources::TextureProcessor::prepareImageData(
+                memory::TextureProcessor::prepareImageData(
                     hostData,
                     mipFilter);
                 return hostData;
@@ -169,11 +169,11 @@ namespace shuttle_engine {
             return emptyData;
         };
 
-        prepared.albedoHostImageData = copyOrCreateEmpty(material.albedoTexture, PreparedHostMaterialData::defaultAlbedoValue, vk::Format::eR8G8B8A8Srgb, resources::MipFilter::Box);
-        prepared.normalHostImageData = copyOrCreateEmpty(material.normalTexture, PreparedHostMaterialData::defaultNormalValue, vk::Format::eR8G8B8A8Unorm, resources::MipFilter::NormalMap);
-        prepared.ormHostImageData = copyOrCreateEmpty(material.ormTexture, PreparedHostMaterialData::defaultOrmValue, vk::Format::eR8G8B8A8Unorm, resources::MipFilter::Box);
-        prepared.emissionHostImageData = copyOrCreateEmpty(material.emissiveTexture, PreparedHostMaterialData::defaultEmissiveValue, vk::Format::eR8G8B8A8Srgb, resources::MipFilter::Box);
-        prepared.heightHostImageData = copyOrCreateEmpty(material.heightTexture, PreparedHostMaterialData::defaultHeightValue, vk::Format::eR8G8B8A8Unorm, resources::MipFilter::Box);
+        prepared.albedoHostImageData = copyOrCreateEmpty(material.albedoTexture, PreparedHostMaterialData::defaultAlbedoValue, vk::Format::eR8G8B8A8Srgb, memory::MipFilter::Box);
+        prepared.normalHostImageData = copyOrCreateEmpty(material.normalTexture, PreparedHostMaterialData::defaultNormalValue, vk::Format::eR8G8B8A8Unorm, memory::MipFilter::NormalMap);
+        prepared.ormHostImageData = copyOrCreateEmpty(material.ormTexture, PreparedHostMaterialData::defaultOrmValue, vk::Format::eR8G8B8A8Unorm, memory::MipFilter::Box);
+        prepared.emissionHostImageData = copyOrCreateEmpty(material.emissiveTexture, PreparedHostMaterialData::defaultEmissiveValue, vk::Format::eR8G8B8A8Srgb, memory::MipFilter::Box);
+        prepared.heightHostImageData = copyOrCreateEmpty(material.heightTexture, PreparedHostMaterialData::defaultHeightValue, vk::Format::eR8G8B8A8Unorm, memory::MipFilter::Box);
 
         prepared.calculateOffsetsAndSize();
 
@@ -182,8 +182,8 @@ namespace shuttle_engine {
 
     vk::ResultValue<StagingBufferMaterialInfo> PbrRender::prepareStagingBufferMaterialInfo(
         PreparedHostMaterialData&& prepared,
-        resources::DeviceAllocator const& allocator,
-        resources::AllocatedBuffer const & stagingBuffer,
+        memory::DeviceAllocator const& allocator,
+        memory::AllocatedBuffer const & stagingBuffer,
         vk::DeviceSize& stagingBufferOffset)
     {
         const vk::DeviceSize baseOffset = stagingBufferOffset;
@@ -247,7 +247,7 @@ namespace shuttle_engine {
     vk::ResultValue<DeviceMaterialInfo> PbrRender::prepareDeviceMaterialInfo(
         const StagingBufferMaterialInfo& stagingInfo,
         vk::Device device,
-        resources::DeviceAllocator const& deviceAllocator) // Удалены commandBuffer и stagingBuffer
+        memory::DeviceAllocator const& deviceAllocator) // Удалены commandBuffer и stagingBuffer
     {
         DeviceMaterialInfo material;
 
@@ -258,7 +258,7 @@ namespace shuttle_engine {
             .sharingMode = vk::SharingMode::eExclusive
         };
 
-        auto uboRes = deviceAllocator.createAndAllocateBufferUnique(uboInfo, resources::MemoryUsage::eGpuOnly);
+        auto uboRes = deviceAllocator.createAndAllocateBufferUnique(uboInfo, memory::MemoryUsage::eGpuOnly);
         if (uboRes.result != vk::Result::eSuccess) return {uboRes.result, {}};
         material.uniformBufferMaterialProperties = std::move(uboRes.value);
 
@@ -266,7 +266,7 @@ namespace shuttle_engine {
         // Эта лямбда теперь НЕ занимается барьерами или копированием!
         auto createTextureResource = [&](
             const StagingBufferImageInfo& imgInfo,
-            resources::UniqueAllocatedImage& outImage,
+            memory::UniqueAllocatedImage& outImage,
             vk::UniqueImageView& outView) -> vk::Result
         {
             if (imgInfo.mipLevels.empty()) return vk::Result::eSuccess; // Если нет мип-уровней, это "пустая" текстура
@@ -284,7 +284,7 @@ namespace shuttle_engine {
                 .initialLayout = vk::ImageLayout::eUndefined // Начальный лейаут - Undefined
             };
 
-            auto imgRes = deviceAllocator.createAndAllocateImageUnique(imageInfo, resources::MemoryUsage::eGpuOnly);
+            auto imgRes = deviceAllocator.createAndAllocateImageUnique(imageInfo, memory::MemoryUsage::eGpuOnly);
             if (imgRes.result != vk::Result::eSuccess) return imgRes.result;
             outImage = std::move(imgRes.value);
 

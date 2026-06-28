@@ -9,13 +9,15 @@
 #include "UiRender/UiRender.hpp"
 
 namespace shuttle_engine {
+    class Engine;
+
     class SunLightControlPanel : public IuiPainter {
     public:
         // Передаем ссылки на данные, которыми будем управлять
         SunLightControlPanel(glm::vec3& dir, glm::vec4& color, float& intensity)
             : m_dir(dir), m_color(color), m_intensity(intensity) {}
 
-        void drawUi() override {
+        void drawUi(Engine& engine) override {
             ImGui::Begin("SunLight Control");
 
             // Поворот солнца

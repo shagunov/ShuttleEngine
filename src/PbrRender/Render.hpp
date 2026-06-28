@@ -15,15 +15,6 @@ namespace shuttle_engine{
         return (value + alignment - 1) & ~(alignment - 1);
     }
 
-    struct PositionAttribute {
-        alignas(16) glm::vec3 position;
-    };
-    struct NormalTangentUvAttribute {
-        alignas(16) glm::vec3 normal;
-        alignas(16) glm::vec2 uv;
-        alignas(16) glm::vec4 tangent;
-    };
-
     struct CameraUniformData {
         glm::mat4 viewProj;
         alignas(16) glm::vec3 cameraPos;
@@ -104,8 +95,7 @@ namespace shuttle_engine{
             vk::CommandBuffer cmdBuffer,
             vk::Buffer vertexBuffer,
             vk::Buffer indexBuffer,
-            vk::Buffer indirectCommandsBuffer,
-            vk::Buffer modelDatasBuffer
+            vk::Buffer indirectCommandsBuffer
         ) const;
 
         std::vector<IndirectDraw> indirectDrawCalls;
@@ -121,28 +111,18 @@ namespace shuttle_engine{
         std::vector<IndirectDraw> indirectDrawCalls;
     };
 
-    struct SceneResourcesOwner {
-        std::vector<resources::UniqueAllocatedBuffer> buffers;
-        std::vector<resources::UniqueAllocatedImage> images;
-        std::vector<vk::UniqueImageView> imageViews;
-        vk::UniqueDescriptorPool descriptorPool;
-        std::vector<vk::UniqueFramebuffer> framebuffers;
-        std::vector<vk::UniqueDescriptorSet> descriptorSets;
-        std::vector<vk::UniqueSampler> samplers;
-    };
-
     struct DeviceMeshData {
-        resources::UniqueAllocatedBuffer vertexBuffer;
+        memory::UniqueAllocatedBuffer vertexBuffer;
         vk::DeviceSize positionAttributeOffset;
         vk::DeviceSize normalUvTangentAttributeOffset;
 
-        resources::UniqueAllocatedBuffer indexBuffer;
+        memory::UniqueAllocatedBuffer indexBuffer;
         vk::DeviceSize indexBufferOffset;
 
-        resources::UniqueAllocatedBuffer indirectBuffer;
+        memory::UniqueAllocatedBuffer indirectBuffer;
         vk::DeviceSize indirectBufferOffset;
 
-        resources::UniqueAllocatedBuffer modelSsboBuffer;
+        memory::UniqueAllocatedBuffer modelSsboBuffer;
         vk::DeviceSize modelSsboBufferOffset;
         vk::UniqueDescriptorSet modelSsboDescriptorSet;
 
@@ -212,13 +192,13 @@ namespace shuttle_engine{
     };
 
     struct DeviceMaterialInfo {
-        resources::UniqueAllocatedBuffer uniformBufferMaterialProperties;
+        memory::UniqueAllocatedBuffer uniformBufferMaterialProperties;
 
-        resources::UniqueAllocatedImage albedoImage;
-        resources::UniqueAllocatedImage normalImage;
-        resources::UniqueAllocatedImage ormImage;
-        resources::UniqueAllocatedImage emissionImage;
-        resources::UniqueAllocatedImage heightImage;
+        memory::UniqueAllocatedImage albedoImage;
+        memory::UniqueAllocatedImage normalImage;
+        memory::UniqueAllocatedImage ormImage;
+        memory::UniqueAllocatedImage emissionImage;
+        memory::UniqueAllocatedImage heightImage;
 
         vk::UniqueImageView albedoTextureView;
         vk::UniqueImageView normalTextureView;
@@ -247,20 +227,17 @@ namespace shuttle_engine{
         };
 
         // --- 4. Геометрия ---
-        resources::UniqueAllocatedBuffer vertexBuffer;
+        memory::UniqueAllocatedBuffer vertexBuffer;
         vk::DeviceSize positionAttributeOffset{0};
         vk::DeviceSize normalUvTangentAttributeOffset{0};
 
-        resources::UniqueAllocatedBuffer indexBuffer;
+        memory::UniqueAllocatedBuffer indexBuffer;
         vk::DeviceSize indexBufferOffset{0};
 
-        resources::UniqueAllocatedBuffer indirectDrawBuffer;
+        memory::UniqueAllocatedBuffer indirectDrawBuffer;
         vk::DeviceSize indirectDrawBufferOffset{0};
 
         std::vector<IndirectDraw> indirectDraws;
-
-        resources::UniqueAllocatedBuffer modelSsbo;
-        vk::DescriptorSet modelSsboDescriptorSet;
 
         // --- 5. Материалы (Список всех Set 1) ---
         std::vector<RenderMaterialData> materials;
@@ -274,9 +251,18 @@ namespace shuttle_engine{
         vk::Extent2D extent;
     };
 
-    struct RenderTargets {
+    struct RenderTarget {
         // Depth + color buffers
-        resources::UniqueAllocatedImage depthBufferImage;
+        memory::UniqueAllocatedImage depthBufferImage;
+        vk::UniqueImageView depthBufferImageView;
+        vk::UniqueImageView colorAttachmentImageView;
+        vk::UniqueFramebuffer mainRenderPassFramebuffer;
+        vk::Extent2D renderTargetExtent;
+    };
+
+    struct OffscreenRenderTarget {
+        memory::UniqueAllocatedImage colorAttachmentImage;
+        memory::UniqueAllocatedImage depthBufferImage;
         vk::UniqueImageView depthBufferImageView;
         vk::UniqueImageView colorAttachmentImageView;
         vk::UniqueFramebuffer mainRenderPassFramebuffer;
@@ -285,15 +271,24 @@ namespace shuttle_engine{
 
     struct FrameData {
         // Shadow resources
-        resources::UniqueAllocatedImage shadowMapImage;
+        memory::UniqueAllocatedImage shadowMapImage;
         vk::UniqueImageView shadowMapImageView;
         vk::UniqueFramebuffer shadowRenderPassFramebuffer;
         vk::Extent2D shadowExtent;
 
         // Scene Data
-        resources::UniqueAllocatedBuffer cameraUbo;
-        resources::UniqueAllocatedBuffer lightInfoUbo;
-        resources::UniqueAllocatedBuffer lightSsbo;
+        memory::UniqueAllocatedBuffer cameraUbo;
+        void* cameraUboMapped = nullptr;
+
+        memory::UniqueAllocatedBuffer lightInfoUbo;
+        void* lightInfoUboMapped = nullptr;
+
+        memory::UniqueAllocatedBuffer lightSsbo;
+        void* lightSsboMapped = nullptr;
+
+        memory::UniqueAllocatedBuffer modelSsbo;
+        void* modelSsboMapped = nullptr;
+
         vk::DescriptorSet sceneDataSet;
     };
 
@@ -306,12 +301,12 @@ namespace shuttle_engine{
             vk::Queue transferQueue,
             vk::Device device,
             vk::CommandPool transferCommandPool,
-            resources::DeviceAllocator const& allocator
+            memory::DeviceAllocator const& allocator
         );
 
         // Наш новый, красивый и умный метод обновления
         static vk::Result updateSceneData(
-            resources::DeviceAllocator const& allocator,
+            memory::DeviceAllocator const& allocator,
             DeviceSceneData& sceneData,
             FrameData& frameData,
             glm::mat4 const& viewMatrix,
@@ -320,16 +315,23 @@ namespace shuttle_engine{
             glm::vec3 const& cameraPos
         );
 
-        [[nodiscard]] vk::ResultValue<std::vector<RenderTargets>> createRenderTargets(
+        [[nodiscard]] vk::ResultValue<std::vector<RenderTarget>> createRenderTargets(
             vk::Device device,
-            resources::DeviceAllocator const& allocator,
+            memory::DeviceAllocator const& allocator,
             std::vector<vk::Image> const& targetImages,
+            vk::Extent2D renderTargetExtent
+        ) const;
+
+        [[nodiscard]] vk::ResultValue<std::vector<OffscreenRenderTarget>> createOffscreenRenderTargets(
+            vk::Device device,
+            memory::DeviceAllocator const& allocator,
+            uint32_t frameCount,
             vk::Extent2D renderTargetExtent
         ) const;
 
         [[nodiscard]] vk::ResultValue<std::vector<FrameData>> createFrameDatas(
             vk::Device device,
-            resources::DeviceAllocator const& allocator,
+            memory::DeviceAllocator const& allocator,
             vk::Extent2D shadowMapExtent,
             vk::DescriptorPool descriptorPool,
             uint32_t frameCount
@@ -340,7 +342,7 @@ namespace shuttle_engine{
             DeviceSceneData const& sceneData,
             vk::CommandBuffer cmd,
             FrameData const& frameData,
-            RenderTargets const& targets,
+            RenderTarget const& targets,
             std::function<void(vk::CommandBuffer)> const& additionalCommands) const;
 
         vk::RenderPass getMainRenderPass(){ return *mainRenderPass; }
@@ -374,14 +376,14 @@ namespace shuttle_engine{
 
         static vk::ResultValue<StagingBufferMeshData> prepareStagingBufferMeshData(
             MeshData const& meshData,
-            resources::DeviceAllocator const& deviceAllocator,
-            resources::AllocatedBuffer stagingBuffer,
+            memory::DeviceAllocator const& deviceAllocator,
+            memory::AllocatedBuffer stagingBuffer,
             vk::DeviceSize& stagingBufferOffset
         );
 
         static vk::ResultValue<DeviceMeshData> prepareDeviceMeshData(
             const StagingBufferMeshData& stagingInfo,
-            resources::DeviceAllocator const& deviceAllocator);
+            memory::DeviceAllocator const& deviceAllocator);
 
         static PreparedHostMaterialData prepareHostMaterialData(
             HostMaterialData const& material
@@ -389,14 +391,14 @@ namespace shuttle_engine{
 
         static vk::ResultValue<StagingBufferMaterialInfo> prepareStagingBufferMaterialInfo(
             PreparedHostMaterialData&& preparedMaterialData,
-            resources::DeviceAllocator const& deviceAllocator,
-            resources::AllocatedBuffer const & stagingBuffer,
+            memory::DeviceAllocator const& deviceAllocator,
+            memory::AllocatedBuffer const & stagingBuffer,
             vk::DeviceSize& stagingBufferOffset);
 
         static vk::ResultValue<DeviceMaterialInfo> prepareDeviceMaterialInfo(
             const StagingBufferMaterialInfo& stagingInfo,
             vk::Device device,
-            resources::DeviceAllocator const& deviceAllocator);
+            memory::DeviceAllocator const& deviceAllocator);
 
         static void fillDescriptorSet(
             vk::Device device,
@@ -417,7 +419,6 @@ namespace shuttle_engine{
 
         vk::UniqueDescriptorSetLayout pbrSceneDataSetLayout;
         vk::UniqueDescriptorSetLayout pbrMaterialSetLayout;
-        vk::UniqueDescriptorSetLayout modelSetLayout;
 
         vk::UniqueSampler shadowSampler;
         vk::UniqueSampler materialSampler;

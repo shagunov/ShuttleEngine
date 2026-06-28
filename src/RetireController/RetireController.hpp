@@ -14,7 +14,7 @@ namespace shuttle_engine{
 
     struct RetiredSwapchain {
         vk::UniqueSwapchainKHR swapchain;
-        std::vector<RenderTargets> renderTargets;
+        std::vector<RenderTarget> renderTargets;
         FrameManager retiredFrameManager;
 
         uint32_t renderMask = 0;        // Текущая маска кадров (стартует с 0)
@@ -28,7 +28,7 @@ namespace shuttle_engine{
     struct SwapchainResources {
         Swapchain swapchain;
         FrameManager frameManager;
-        std::vector<RenderTargets> renderTargets;
+        std::vector<RenderTarget> renderTargets;
     };
 
     class RetireController {

@@ -7,7 +7,7 @@
 
 #include "VulkanHelperFunctions/VulkanHelperFunctions.hpp"
 
-namespace shuttle_engine::resources {
+namespace shuttle_engine::memory {
 
 	vk::ResultValue<DeviceAllocator> DeviceAllocator::create(
 		vk::Instance instance, vk::Device device,
@@ -34,11 +34,19 @@ namespace shuttle_engine::resources {
 			.vkCreateBuffer = dispatcher.vkCreateBuffer,
 			.vkDestroyBuffer = dispatcher.vkDestroyBuffer,
 			.vkCreateImage = dispatcher.vkCreateImage,
-			.vkDestroyImage = dispatcher.vkDestroyImage
+			.vkDestroyImage = dispatcher.vkDestroyImage,
+			.vkCmdCopyBuffer = dispatcher.vkCmdCopyBuffer,
+			.vkGetBufferMemoryRequirements2KHR = dispatcher.vkGetBufferMemoryRequirements2KHR,
+			.vkGetImageMemoryRequirements2KHR = dispatcher.vkGetImageMemoryRequirements2,
+			.vkBindBufferMemory2KHR = dispatcher.vkBindBufferMemory2KHR,
+			.vkBindImageMemory2KHR = dispatcher.vkBindImageMemory2KHR,
+			.vkGetPhysicalDeviceMemoryProperties2KHR = dispatcher.vkGetPhysicalDeviceMemoryProperties2KHR,
+			.vkGetDeviceBufferMemoryRequirements = dispatcher.vkGetDeviceBufferMemoryRequirements,
+			.vkGetDeviceImageMemoryRequirements = dispatcher.vkGetDeviceImageMemoryRequirements
 		};
 
 		VmaAllocatorCreateInfo allocatorCreateInfo{
-			.flags = 0,
+			.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
 			.physicalDevice = physicalDevice,
 			.device = device,
 			.preferredLargeHeapBlockSize = 0,
@@ -47,7 +55,7 @@ namespace shuttle_engine::resources {
 			.pHeapSizeLimit = nullptr,
 			.pVulkanFunctions = &vulkanFunctions,
 			.instance = instance,
-			.vulkanApiVersion = VK_API_VERSION_1_0,
+			.vulkanApiVersion = VK_API_VERSION_1_4,
 			.pTypeExternalMemoryHandleTypes = nullptr
 		};
 
@@ -252,6 +260,18 @@ namespace shuttle_engine::resources {
 		vmaUnmapMemory(allocator, allocationHandle);
 		return vk::Result::eSuccess;
 	}
+
+	void* DeviceAllocator::getMappedPointer(AllocatedBuffer buffer) const noexcept {
+		auto&& allocator = static_cast<VmaAllocator>(handle);
+		auto&& allocationHandle = static_cast<VmaAllocation>(buffer.getAllocation());
+
+		VmaAllocationInfo allocInfo;
+		vmaGetAllocationInfo(allocator, allocationHandle, &allocInfo);
+
+		// Если буфер был создан с флагом eMapped, pMappedData будет не nullptr
+		return allocInfo.pMappedData;
+	}
+
 
 	vk::Result DeviceAllocator::readBufferToHostStride(StrideCopyBufferToHostInfo const &readInfos) const noexcept {
 		auto&& allocator = static_cast<VmaAllocator>(handle);

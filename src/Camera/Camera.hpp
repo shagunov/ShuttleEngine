@@ -15,6 +15,16 @@ namespace shuttle_engine {
 		[[nodiscard]] glm::mat4 getProjectionMatrix() const;
 		[[nodiscard]] glm::mat4 getShortProjectionMatrix() const;
 		[[nodiscard]] glm::vec3 getPosition() const { return position; }
+		[[nodiscard]] glm::vec3 getForwardVector() const {
+			return orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+		}
+
+		// Сеттеры и геттеры для скорости
+		void setMovementSpeed(float speed) { movementSpeed = speed; }
+		[[nodiscard]] float getMovementSpeed() const { return movementSpeed; }
+
+		void setRotationSpeed(float speed) { rotationSpeed = speed; }
+		[[nodiscard]] float getRotationSpeed() const { return rotationSpeed; }
 
 		void setWindowSize(uint32_t width, uint32_t height);
 

@@ -1,5 +1,6 @@
 //
 // Created by Shagu on 14.06.2026.
+// Refactored on 18.06.2026.
 //
 
 #ifndef HELLOTRIANGLE_UIRENDER_HPP
@@ -7,59 +8,57 @@
 #include <imgui.h>
 
 #include "IncludeVulkan.hpp"
-#include "Sdl/SdlLibrary/SdlLibrary.hpp"
+#include "PbrRender/Render.hpp"
 #include "Sdl/SdlWindow/SdlWindow.hpp"
 
 namespace shuttle_engine {
+    class Engine;
 
     class IuiPainter {
     public:
-        virtual void drawUi() = 0;
+        // Теперь каждый рисовальщик принимает ссылку на Engine
+        virtual void drawUi(Engine& engine) = 0;
         virtual ~IuiPainter() = default;
     };
 
+    // --- ОБНОВИ ВСЕХ СВОИХ СУЩЕСТВУЮЩИХ ПРЕДКОВ (HelloWorld, Demo, FPSCounter) ---
+    // Пример:
     class HelloWorldPainter : public IuiPainter {
     public:
-        void drawUi() override {
+        void drawUi(Engine& engine) override {
             ImGui::Begin("Hello World");
             ImGui::Text("Hello World");
             ImGui::End();
         }
-
     };
 
     class DemoWindowPainter : public IuiPainter {
     public:
-        void drawUi() override {
+        void drawUi(Engine& engine) override {
             ImGui::ShowDemoWindow();
         }
     };
 
-    class FPSCounterPainter : public shuttle_engine::IuiPainter {
+    class FPSCounterPainter : public IuiPainter {
     public:
-        void drawUi() override {
-            // Устанавливаем прозрачное окно в углу или обычное окошко
+        void drawUi(Engine& engine) override {
             ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
             float fps = ImGui::GetIO().Framerate;
             float ms = 1000.0f / fps;
 
-            // Выводим текст с цветом (зеленый если > 60 FPS, желтый если ниже)
             ImGui::Text("FPS: ");
             ImGui::SameLine();
             ImGui::TextColored(fps > 60.0f ? ImVec4(0,1,0,1) : ImVec4(1,1,0,1), "%.1f", fps);
 
             ImGui::Text("Frame Time: %.3f ms", ms);
 
-            // Добавим маленький график для наглядности (опционально)
-            // Мы используем static, чтобы хранить историю между вызовами const метода
             static float values[90] = { 0 };
             static int values_offset = 0;
             static double refresh_time = 0.0;
 
             if (refresh_time == 0.0) refresh_time = ImGui::GetTime();
 
-            // Обновляем график каждые 0.1 сек, чтобы он не летел слишком быстро
             while (refresh_time < ImGui::GetTime()) {
                 values[values_offset] = ms;
                 values_offset = (values_offset + 1) % 90;
@@ -72,7 +71,15 @@ namespace shuttle_engine {
         }
     };
 
-    struct UiTargets {};
+    struct ImGuiVulkanImage {
+        vk::DescriptorSet descriptorSet;
+    };
+
+    struct ImGuiRenderTarget {
+        vk::UniqueImageView colorAttachmentImageView;
+        vk::UniqueFramebuffer targetFramebuffer;
+        vk::Extent2D attachmentExtent;
+    };
 
     class UiRender {
     public:
@@ -87,16 +94,29 @@ namespace shuttle_engine {
             vk::RenderPass renderPass
         );
 
-        void bindInputEventHandler(SdlLibrary& library);
+        // Метод bindInputEventHandler УДАЛЕН. Ввод теперь обрабатывает ApplicationController.
 
-        void drawUi(IuiPainter && painter);
+        void drawUi(IuiPainter & painter, Engine& engine);
 
         void recordDrawCommands(vk::CommandBuffer cmdBuffer) const;
 
+        void recordDrawOffscreenCommands(vk::CommandBuffer cmdBuffer, ImGuiRenderTarget const& target) const;
+
         void destroy(vk::Device device);
 
+        [[nodiscard]] std::vector<ImGuiVulkanImage> createVulkanViewportImages(std::vector<OffscreenRenderTarget> const& offscreenRenderTarget, uint32_t frameCount) const;
+        [[nodiscard]] vk::ResultValue<std::vector<ImGuiRenderTarget>> createRenderTargets(
+            vk::Device device,
+            std::vector<vk::Image> const& imageAttachments,
+            vk::Extent2D attachmentExtent
+        );
+
     private:
+
+        vk::Result initRenderPass(vk::Device device, vk::ImageLayout finalLayout);
+
         vk::UniqueDescriptorPool uiDescriptorPool;
+        vk::UniqueRenderPass uiRenderPass;
     };
 } // shuttle_engine
 

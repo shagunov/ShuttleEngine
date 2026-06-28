@@ -1,29 +1,31 @@
 #pragma once
 #include <vector>
+#include <SDL2/SDL.h>
+#include "../SdlKeyboard/SdlKeyCode.hpp"
 #include "../SdlKeyboard/SdlKeyMode.hpp"
-#include "Sdl/SdlWindow/SdlWindow.hpp"
 
-class SdlLibrary {
-public:
-	SdlLibrary();
+namespace shuttle_engine {
 
-	SdlLibrary(SdlLibrary const&) = delete;
-	SdlLibrary& operator=(SdlLibrary const&) = delete;
-	SdlLibrary(SdlLibrary&&) = delete;
-	SdlLibrary& operator=(SdlLibrary&&) = delete;
+	class SdlLibrary {
+	public:
+		SdlLibrary();
 
-	void setRelativeMouseMode(bool enabled);
+		// Запрет копирования и перемещения
+		SdlLibrary(SdlLibrary const&) = delete;
+		SdlLibrary& operator=(SdlLibrary const&) = delete;
+		SdlLibrary(SdlLibrary&&) = delete;
+		SdlLibrary& operator=(SdlLibrary&&) = delete;
 
-	SdlKeyState getKeyState(SdlKeyCode keyCode) const;
+		void setRelativeMouseMode(bool enabled);
+		void postQuitEvent();
 
-	[[nodiscard]] static std::vector<char const*> getSurfaceRequiredExtensions();
-	void postQuitEvent();
+		// САМЫЙ ВАЖНЫЙ МЕТОД: Опрашивает одно событие. Без аллокаций!
+		// Возвращает true, если событие есть, и запишет его в 'event'
+		bool pollEvent(SDL_Event& event);
 
-	void addCustomEventProcessor(std::function<void (SDL_Event const& event)> const &processor);
+		[[nodiscard]] static std::vector<char const*> getSurfaceRequiredExtensions();
 
-	bool pullEvents();
+		~SdlLibrary();
+	};
 
-	~SdlLibrary();
-private:
-	std::vector<std::function<void (SDL_Event const& event)>> customEventProcessors;
-};
+} // namespace shuttle_engine

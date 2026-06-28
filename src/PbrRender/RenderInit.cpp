@@ -660,9 +660,8 @@ namespace shuttle_engine {
         // ВАЖНО: порядок в массиве определяет номер set в шейдере: layout(set = 0, binding = X) и layout(set = 1, binding = Y)
         vk::DescriptorSetLayout const layouts[] = {
             samplersSetLayout.get(),     // Будет доступен как set = 0
-            modelSetLayout.get(),        // Будет доступен как set = 1
-            pbrSceneDataSetLayout.get(), // Будет доступен как set = 2
-            pbrMaterialSetLayout.get(),  // Будет доступен как set = 3
+            pbrSceneDataSetLayout.get(), // Будет доступен как set = 1
+            pbrMaterialSetLayout.get(),  // Будет доступен как set = 2
         };
 
         vk::PipelineLayoutCreateInfo const createInfo{
@@ -680,7 +679,6 @@ namespace shuttle_engine {
     vk::Result PbrRender::initShadowPipelineLayout(vk::Device device) {
 
         vk::DescriptorSetLayout const shadowLayouts[] {
-            modelSetLayout.get(),
             pbrSceneDataSetLayout.get()
         };
 
